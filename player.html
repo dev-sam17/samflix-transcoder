@@ -1,554 +1,557 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SamFlix Player</title>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <style>
-      body {
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-        background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-        color: #fff;
-        margin: 0;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        min-height: 100vh;
-      }
 
-      h1 {
-        margin-bottom: 30px;
-        font-size: 2.5rem;
-        text-align: center;
-        background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-      }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SamFlix Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: #fff;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
 
+    h1 {
+      margin-bottom: 30px;
+      font-size: 2.5rem;
+      text-align: center;
+      background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .player-container {
+      width: 960px;
+      height: 640px;
+      background-color: #000;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+      position: relative;
+    }
+
+    video {
+      width: 100%;
+      height: 540px;
+      background-color: #000;
+      display: block;
+      object-fit: contain;
+    }
+
+    .embedded-controls {
+      background: linear-gradient(180deg, #1a1a1a 0%, #000 100%);
+      border-top: 1px solid #333;
+      padding: 20px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 25px;
+      align-items: center;
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .player-info {
+      flex: 1;
+    }
+
+    .now-playing {
+      font-size: 16px;
+      font-weight: 600;
+      color: #4ecdc4;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      min-width: 120px;
+    }
+
+    .control-group label {
+      font-size: 12px;
+      color: #aaa;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    select {
+      background-color: #2a2a2a;
+      color: #fff;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    select:hover {
+      border-color: #4ecdc4;
+      background-color: #333;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: #4ecdc4;
+      box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.2);
+    }
+
+    .seek-controls {
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(78, 205, 196, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .footer {
+      margin-top: 30px;
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+    }
+
+    .error-message {
+      background-color: #ff4757;
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      display: none;
+    }
+
+    .loading-message {
+      background-color: #4ecdc4;
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    @media (max-width: 1024px) {
       .player-container {
-        width: 960px;
-        height: 640px;
-        background-color: #000;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
-        position: relative;
+        width: 90vw;
+        height: auto;
       }
 
       video {
-        width: 100%;
-        height: 540px;
-        background-color: #000;
-        display: block;
-        object-fit: contain;
-      }
-
-      .embedded-controls {
-        background: linear-gradient(180deg, #1a1a1a 0%, #000 100%);
-        border-top: 1px solid #333;
-        padding: 20px;
-        height: 80px;
-        display: flex;
-        align-items: center;
+        height: calc(90vw * 9 / 16);
       }
 
       .controls-row {
-        display: flex;
-        gap: 25px;
-        align-items: center;
-        width: 100%;
-        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 15px;
       }
+    }
+  </style>
+</head>
 
-      .player-info {
-        flex: 1;
-      }
+<body>
+  <h1>SamFlix Player</h1>
 
-      .now-playing {
-        font-size: 16px;
-        font-weight: 600;
-        color: #4ecdc4;
-      }
+  <div class="loading-message" id="loading-message">
+    Loading video streams...
+  </div>
 
-      .control-group {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-        min-width: 120px;
-      }
+  <div class="error-message" id="error-message"></div>
 
-      .control-group label {
-        font-size: 12px;
-        color: #aaa;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
+  <div class="player-container" id="player-container" style="display: none">
+    <video id="video" controls preload="metadata"></video>
 
-      select {
-        background-color: #2a2a2a;
-        color: #fff;
-        border: 1px solid #444;
-        border-radius: 6px;
-        padding: 8px 12px;
-        font-size: 14px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-      }
+    <div class="embedded-controls">
+      <div class="controls-row">
+        <div class="player-info">
+          <span class="now-playing"> Now Playing</span>
+        </div>
 
-      select:hover {
-        border-color: #4ecdc4;
-        background-color: #333;
-      }
+        <div class="control-group">
+          <label for="quality-selector"> Quality</label>
+          <select id="quality-selector" disabled>
+            <option value="">Loading...</option>
+          </select>
+        </div>
 
-      select:focus {
-        outline: none;
-        border-color: #4ecdc4;
-        box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.2);
-      }
+        <div class="control-group">
+          <label for="audio-selector"> Audio Track</label>
+          <select id="audio-selector" disabled>
+            <option value="">Loading...</option>
+          </select>
+        </div>
 
-      .seek-controls {
-        display: flex;
-        gap: 10px;
-      }
+        <div class="control-group">
+          <label for="subtitle-selector"> Subtitles</label>
+          <select id="subtitle-selector">
+            <option value="disabled">Off</option>
+          </select>
+        </div>
 
-      button {
-        background: linear-gradient(135deg, #4ecdc4 0%, #44a08d 100%);
-        color: white;
-        border: none;
-        border-radius: 6px;
-        padding: 10px 16px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(78, 205, 196, 0.4);
-      }
-
-      button:active {
-        transform: translateY(0);
-      }
-
-      .footer {
-        margin-top: 30px;
-        text-align: center;
-        color: #666;
-        font-size: 14px;
-      }
-
-      .error-message {
-        background-color: #ff4757;
-        color: white;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 20px 0;
-        display: none;
-      }
-
-      .loading-message {
-        background-color: #4ecdc4;
-        color: white;
-        padding: 15px;
-        border-radius: 8px;
-        margin: 20px 0;
-        text-align: center;
-      }
-
-      @media (max-width: 1024px) {
-        .player-container {
-          width: 90vw;
-          height: auto;
-        }
-
-        video {
-          height: calc(90vw * 9 / 16);
-        }
-
-        .controls-row {
-          flex-wrap: wrap;
-          gap: 15px;
-        }
-      }
-    </style>
-  </head>
-  <body>
-    <h1>SamFlix Player</h1>
-
-    <div class="loading-message" id="loading-message">
-      Loading video streams...
-    </div>
-
-    <div class="error-message" id="error-message"></div>
-
-    <div class="player-container" id="player-container" style="display: none">
-      <video id="video" controls preload="metadata"></video>
-
-      <div class="embedded-controls">
-        <div class="controls-row">
-          <div class="player-info">
-            <span class="now-playing"> Now Playing</span>
-          </div>
-
-          <div class="control-group">
-            <label for="quality-selector"> Quality</label>
-            <select id="quality-selector" disabled>
-              <option value="">Loading...</option>
-            </select>
-          </div>
-
-          <div class="control-group">
-            <label for="audio-selector"> Audio Track</label>
-            <select id="audio-selector" disabled>
-              <option value="">Loading...</option>
-            </select>
-          </div>
-
-          <div class="control-group">
-            <label for="subtitle-selector"> Subtitles</label>
-            <select id="subtitle-selector">
-              <option value="disabled">Off</option>
-            </select>
-          </div>
-
-          <div class="seek-controls">
-            <button id="rewind-btn">10s</button>
-            <button id="forward-btn">10s</button>
-          </div>
+        <div class="seek-controls">
+          <button id="rewind-btn">10s</button>
+          <button id="forward-btn">10s</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <div class="footer">Powered by SamFlix Transcoder</div>
+  <div class="footer">Powered by SamFlix Transcoder</div>
 
-    <script>
-      document.addEventListener("DOMContentLoaded", function () {
-        const video = document.getElementById("video");
-        const qualitySelector = document.getElementById("quality-selector");
-        const audioSelector = document.getElementById("audio-selector");
-        const subtitleSelector = document.getElementById("subtitle-selector");
-        const rewindBtn = document.getElementById("rewind-btn");
-        const forwardBtn = document.getElementById("forward-btn");
-        const loadingMessage = document.getElementById("loading-message");
-        const errorMessage = document.getElementById("error-message");
-        const playerContainer = document.getElementById("player-container");
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const video = document.getElementById("video");
+      const qualitySelector = document.getElementById("quality-selector");
+      const audioSelector = document.getElementById("audio-selector");
+      const subtitleSelector = document.getElementById("subtitle-selector");
+      const rewindBtn = document.getElementById("rewind-btn");
+      const forwardBtn = document.getElementById("forward-btn");
+      const loadingMessage = document.getElementById("loading-message");
+      const errorMessage = document.getElementById("error-message");
+      const playerContainer = document.getElementById("player-container");
 
-        let hls;
+      let hls;
 
-        function showError(message) {
-          errorMessage.textContent = message;
-          errorMessage.style.display = "block";
-          loadingMessage.style.display = "none";
-        }
+      function showError(message) {
+        errorMessage.textContent = message;
+        errorMessage.style.display = "block";
+        loadingMessage.style.display = "none";
+      }
 
-        function hideLoading() {
-          loadingMessage.style.display = "none";
-          playerContainer.style.display = "block";
-        }
+      function hideLoading() {
+        loadingMessage.style.display = "none";
+        playerContainer.style.display = "block";
+      }
 
-        // Initialize HLS.js
-        if (Hls.isSupported()) {
-          hls = new Hls({
-            capLevelToPlayerSize: true,
-            autoStartLoad: true,
-            startLevel: -1, // Auto quality
-            debug: false,
-            enableWorker: true,
-            lowLatencyMode: false,
-            backBufferLength: 90,
-          });
+      // Initialize HLS.js
+      if (Hls.isSupported()) {
+        hls = new Hls({
+          capLevelToPlayerSize: true,
+          autoStartLoad: true,
+          startLevel: -1, // Auto quality
+          debug: false,
+          enableWorker: true,
+          lowLatencyMode: false,
+          backBufferLength: 90,
+        });
 
-          // Error handling
-          hls.on(Hls.Events.ERROR, function (event, data) {
-            console.error("HLS Error:", data);
-            if (data.fatal) {
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  showError("Network error occurred. Retrying...");
-                  hls.startLoad();
-                  break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  console.log("Media error details:", data.details);
-                  if (data.details === "bufferAppendError") {
-                    showError("Audio buffer error. Attempting recovery...");
-                    // Try to recover from buffer append error
-                    try {
-                      hls.recoverMediaError();
-                      setTimeout(() => {
-                        if (video.error) {
-                          // If still erroring, try a more aggressive recovery
-                          hls.swapAudioCodec();
-                          hls.recoverMediaError();
-                        }
-                      }, 1000);
-                    } catch (e) {
-                      console.error("Recovery failed:", e);
-                      showError(
-                        "Unable to recover from audio error. Please refresh the page."
-                      );
-                    }
-                  } else {
-                    showError("Media error occurred. Attempting to recover...");
+        // Error handling
+        hls.on(Hls.Events.ERROR, function (event, data) {
+          console.error("HLS Error:", data);
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                showError("Network error occurred. Retrying...");
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                console.log("Media error details:", data.details);
+                if (data.details === "bufferAppendError") {
+                  showError("Audio buffer error. Attempting recovery...");
+                  // Try to recover from buffer append error
+                  try {
                     hls.recoverMediaError();
+                    setTimeout(() => {
+                      if (video.error) {
+                        // If still erroring, try a more aggressive recovery
+                        hls.swapAudioCodec();
+                        hls.recoverMediaError();
+                      }
+                    }, 1000);
+                  } catch (e) {
+                    console.error("Recovery failed:", e);
+                    showError(
+                      "Unable to recover from audio error. Please refresh the page."
+                    );
                   }
-                  break;
-                default:
-                  showError("Fatal error occurred: " + data.details);
-                  hls.destroy();
-                  break;
-              }
-            } else {
-              // Non-fatal errors
-              console.warn("Non-fatal HLS error:", data.details);
-              if (data.details === "bufferAppendError") {
-                // Try to continue playback despite buffer error
-                setTimeout(() => {
-                  if (video.paused && !video.ended) {
-                    video.play().catch(console.error);
-                  }
-                }, 500);
-              }
+                } else {
+                  showError("Media error occurred. Attempting to recover...");
+                  hls.recoverMediaError();
+                }
+                break;
+              default:
+                showError("Fatal error occurred: " + data.details);
+                hls.destroy();
+                break;
             }
-          });
+          } else {
+            // Non-fatal errors
+            console.warn("Non-fatal HLS error:", data.details);
+            if (data.details === "bufferAppendError") {
+              // Try to continue playback despite buffer error
+              setTimeout(() => {
+                if (video.paused && !video.ended) {
+                  video.play().catch(console.error);
+                }
+              }, 500);
+            }
+          }
+        });
 
-          // Load the master playlist
-          hls.loadSource("master.m3u8");
-          hls.attachMedia(video);
+        // Load the master playlist
+        hls.loadSource("/output/master.m3u8");
+        hls.attachMedia(video);
 
-          // Wait for manifest to be loaded and parsed
-          hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
-            console.log("Manifest parsed successfully", data);
-            hideLoading();
-
-            // Populate quality selector
-            populateQualityLevels(data.levels);
-
-            // Populate audio tracks
-            setTimeout(() => {
-              if (hls.audioTracks && hls.audioTracks.length > 0) {
-                populateAudioTracks(hls.audioTracks);
-              } else {
-                audioSelector.innerHTML =
-                  '<option value="-1">Default Audio</option>';
-                audioSelector.disabled = false;
-              }
-            }, 100);
-
-            // Populate subtitle tracks
-            populateSubtitleTracks();
-
-            // Auto-play with error handling
-            video.play().catch((e) => {
-              console.log("Auto-play prevented:", e);
-              // Auto-play was prevented, user needs to interact first
-            });
-          });
-
-          // Handle level switching
-          hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
-            console.log("Quality switched to:", data.level);
-          });
-
-          // Handle audio track switching
-          hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, function (event, data) {
-            console.log("Audio track switched to:", data.id);
-          });
-        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          // Native HLS support (Safari)
-          video.src = "master.m3u8";
+        // Wait for manifest to be loaded and parsed
+        hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+          console.log("Manifest parsed successfully", data);
           hideLoading();
 
-          video.addEventListener("loadedmetadata", function () {
-            populateBasicControls();
+          // Populate quality selector
+          populateQualityLevels(data.levels);
+
+          // Populate audio tracks
+          setTimeout(() => {
+            if (hls.audioTracks && hls.audioTracks.length > 0) {
+              populateAudioTracks(hls.audioTracks);
+            } else {
+              audioSelector.innerHTML =
+                '<option value="-1">Default Audio</option>';
+              audioSelector.disabled = false;
+            }
+          }, 100);
+
+          // Populate subtitle tracks
+          populateSubtitleTracks();
+
+          // Auto-play with error handling
+          video.play().catch((e) => {
+            console.log("Auto-play prevented:", e);
+            // Auto-play was prevented, user needs to interact first
+          });
+        });
+
+        // Handle level switching
+        hls.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+          console.log("Quality switched to:", data.level);
+        });
+
+        // Handle audio track switching
+        hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, function (event, data) {
+          console.log("Audio track switched to:", data.id);
+        });
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Native HLS support (Safari)
+        video.src = "master.m3u8";
+        hideLoading();
+
+        video.addEventListener("loadedmetadata", function () {
+          populateBasicControls();
+        });
+      } else {
+        showError(
+          "HLS is not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari."
+        );
+      }
+
+      // Populate quality levels
+      function populateQualityLevels(levels) {
+        qualitySelector.innerHTML = '<option value="-1">Auto</option>';
+
+        levels.forEach((level, index) => {
+          const option = document.createElement("option");
+          option.value = index;
+          option.textContent = `${level.height}p (${Math.round(
+            level.bitrate / 1000
+          )}k)`;
+          qualitySelector.appendChild(option);
+        });
+
+        qualitySelector.disabled = false;
+      }
+
+      // Populate audio tracks
+      function populateAudioTracks(audioTracks) {
+        audioSelector.innerHTML = "";
+
+        audioTracks.forEach((track, index) => {
+          const option = document.createElement("option");
+          option.value = index;
+          option.textContent = track.name || `Audio ${index + 1}`;
+          if (track.default) option.selected = true;
+          audioSelector.appendChild(option);
+        });
+
+        audioSelector.disabled = false;
+      }
+
+      // Populate subtitle tracks
+      function populateSubtitleTracks() {
+        subtitleSelector.innerHTML = '<option value="disabled">Off</option>';
+
+        // Load subtitles manually since they're not in the HLS manifest
+        // Check for known subtitle files
+        const knownSubtitles = [
+          { file: "subs_eng.vtt", name: "English", language: "en" },
+        ];
+
+        knownSubtitles.forEach((subtitle, index) => {
+          const option = document.createElement("option");
+          option.value = subtitle.file;
+          option.textContent = subtitle.name;
+          subtitleSelector.appendChild(option);
+
+          // Pre-load the subtitle track
+          const track = document.createElement("track");
+          track.kind = "subtitles";
+          track.label = subtitle.name;
+          track.srclang = subtitle.language;
+          track.src = subtitle.file;
+          track.default = index === 0; // Make first subtitle default
+          video.appendChild(track);
+        });
+
+        subtitleSelector.disabled = false;
+      }
+
+      // Basic controls for non-HLS.js browsers
+      function populateBasicControls() {
+        qualitySelector.innerHTML = '<option value="-1">Auto</option>';
+        qualitySelector.disabled = false;
+
+        audioSelector.innerHTML = '<option value="-1">Default Audio</option>';
+        audioSelector.disabled = false;
+
+        populateSubtitleTracks(); // Use the same subtitle loading logic
+      }
+
+      // Event listeners
+      qualitySelector.addEventListener("change", function () {
+        if (hls) {
+          const level = parseInt(this.value);
+          hls.currentLevel = level;
+          console.log("Quality changed to:", level === -1 ? "Auto" : level);
+        }
+      });
+
+      audioSelector.addEventListener("change", function () {
+        if (hls) {
+          const trackId = parseInt(this.value);
+          if (trackId >= 0) {
+            hls.audioTrack = trackId;
+            console.log("Audio track changed to:", trackId);
+          }
+        }
+      });
+
+      subtitleSelector.addEventListener("change", function () {
+        const selectedValue = this.value;
+
+        if (selectedValue === "disabled") {
+          // Disable all subtitle tracks
+          Array.from(video.textTracks).forEach((track) => {
+            track.mode = "disabled";
           });
         } else {
-          showError(
-            "HLS is not supported in this browser. Please use a modern browser like Chrome, Firefox, or Safari."
-          );
-        }
-
-        // Populate quality levels
-        function populateQualityLevels(levels) {
-          qualitySelector.innerHTML = '<option value="-1">Auto</option>';
-
-          levels.forEach((level, index) => {
-            const option = document.createElement("option");
-            option.value = index;
-            option.textContent = `${level.height}p (${Math.round(
-              level.bitrate / 1000
-            )}k)`;
-            qualitySelector.appendChild(option);
-          });
-
-          qualitySelector.disabled = false;
-        }
-
-        // Populate audio tracks
-        function populateAudioTracks(audioTracks) {
-          audioSelector.innerHTML = "";
-
-          audioTracks.forEach((track, index) => {
-            const option = document.createElement("option");
-            option.value = index;
-            option.textContent = track.name || `Audio ${index + 1}`;
-            if (track.default) option.selected = true;
-            audioSelector.appendChild(option);
-          });
-
-          audioSelector.disabled = false;
-        }
-
-        // Populate subtitle tracks
-        function populateSubtitleTracks() {
-          subtitleSelector.innerHTML = '<option value="disabled">Off</option>';
-
-          // Load subtitles manually since they're not in the HLS manifest
-          // Check for known subtitle files
-          const knownSubtitles = [
-            { file: "subs_eng.vtt", name: "English", language: "en" },
-          ];
-
-          knownSubtitles.forEach((subtitle, index) => {
-            const option = document.createElement("option");
-            option.value = subtitle.file;
-            option.textContent = subtitle.name;
-            subtitleSelector.appendChild(option);
-
-            // Pre-load the subtitle track
-            const track = document.createElement("track");
-            track.kind = "subtitles";
-            track.label = subtitle.name;
-            track.srclang = subtitle.language;
-            track.src = subtitle.file;
-            track.default = index === 0; // Make first subtitle default
-            video.appendChild(track);
-          });
-
-          subtitleSelector.disabled = false;
-        }
-
-        // Basic controls for non-HLS.js browsers
-        function populateBasicControls() {
-          qualitySelector.innerHTML = '<option value="-1">Auto</option>';
-          qualitySelector.disabled = false;
-
-          audioSelector.innerHTML = '<option value="-1">Default Audio</option>';
-          audioSelector.disabled = false;
-
-          populateSubtitleTracks(); // Use the same subtitle loading logic
-        }
-
-        // Event listeners
-        qualitySelector.addEventListener("change", function () {
-          if (hls) {
-            const level = parseInt(this.value);
-            hls.currentLevel = level;
-            console.log("Quality changed to:", level === -1 ? "Auto" : level);
-          }
-        });
-
-        audioSelector.addEventListener("change", function () {
-          if (hls) {
-            const trackId = parseInt(this.value);
-            if (trackId >= 0) {
-              hls.audioTrack = trackId;
-              console.log("Audio track changed to:", trackId);
+          // Enable the selected subtitle track
+          Array.from(video.textTracks).forEach((track, index) => {
+            if (track.src && track.src.endsWith(selectedValue)) {
+              track.mode = "showing";
+            } else {
+              track.mode = "hidden";
             }
-          }
-        });
-
-        subtitleSelector.addEventListener("change", function () {
-          const selectedValue = this.value;
-
-          if (selectedValue === "disabled") {
-            // Disable all subtitle tracks
-            Array.from(video.textTracks).forEach((track) => {
-              track.mode = "disabled";
-            });
-          } else {
-            // Enable the selected subtitle track
-            Array.from(video.textTracks).forEach((track, index) => {
-              if (track.src && track.src.endsWith(selectedValue)) {
-                track.mode = "showing";
-              } else {
-                track.mode = "hidden";
-              }
-            });
-          }
-          console.log("Subtitle track changed to:", selectedValue);
-        });
-
-        // Seek controls
-        rewindBtn.addEventListener("click", function () {
-          video.currentTime = Math.max(0, video.currentTime - 10);
-        });
-
-        forwardBtn.addEventListener("click", function () {
-          video.currentTime = Math.min(video.duration, video.currentTime + 10);
-        });
-
-        // Keyboard shortcuts
-        document.addEventListener("keydown", function (e) {
-          if (
-            e.target.tagName.toLowerCase() === "input" ||
-            e.target.tagName.toLowerCase() === "select"
-          ) {
-            return;
-          }
-
-          switch (e.key) {
-            case " ":
-              e.preventDefault();
-              if (video.paused) {
-                video.play();
-              } else {
-                video.pause();
-              }
-              break;
-            case "ArrowLeft":
-              e.preventDefault();
-              video.currentTime = Math.max(0, video.currentTime - 10);
-              break;
-            case "ArrowRight":
-              e.preventDefault();
-              video.currentTime = Math.min(
-                video.duration,
-                video.currentTime + 10
-              );
-              break;
-            case "f":
-              e.preventDefault();
-              if (video.requestFullscreen) {
-                video.requestFullscreen();
-              }
-              break;
-          }
-        });
-
-        // Video event listeners
-        video.addEventListener("loadstart", function () {
-          console.log("Video load started");
-        });
-
-        video.addEventListener("canplay", function () {
-          console.log("Video can start playing");
-        });
-
-        video.addEventListener("error", function (e) {
-          console.error("Video error:", e);
-          showError(
-            "Video playback error occurred. Please try refreshing the page."
-          );
-        });
+          });
+        }
+        console.log("Subtitle track changed to:", selectedValue);
       });
-    </script>
-  </body>
+
+      // Seek controls
+      rewindBtn.addEventListener("click", function () {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      });
+
+      forwardBtn.addEventListener("click", function () {
+        video.currentTime = Math.min(video.duration, video.currentTime + 10);
+      });
+
+      // Keyboard shortcuts
+      document.addEventListener("keydown", function (e) {
+        if (
+          e.target.tagName.toLowerCase() === "input" ||
+          e.target.tagName.toLowerCase() === "select"
+        ) {
+          return;
+        }
+
+        switch (e.key) {
+          case " ":
+            e.preventDefault();
+            if (video.paused) {
+              video.play();
+            } else {
+              video.pause();
+            }
+            break;
+          case "ArrowLeft":
+            e.preventDefault();
+            video.currentTime = Math.max(0, video.currentTime - 10);
+            break;
+          case "ArrowRight":
+            e.preventDefault();
+            video.currentTime = Math.min(
+              video.duration,
+              video.currentTime + 10
+            );
+            break;
+          case "f":
+            e.preventDefault();
+            if (video.requestFullscreen) {
+              video.requestFullscreen();
+            }
+            break;
+        }
+      });
+
+      // Video event listeners
+      video.addEventListener("loadstart", function () {
+        console.log("Video load started");
+      });
+
+      video.addEventListener("canplay", function () {
+        console.log("Video can start playing");
+      });
+
+      video.addEventListener("error", function (e) {
+        console.error("Video error:", e);
+        showError(
+          "Video playback error occurred. Please try refreshing the page."
+        );
+      });
+    });
+  </script>
+</body>
+
 </html>
