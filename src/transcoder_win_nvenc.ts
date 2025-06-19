@@ -2,88 +2,68 @@ import fs from "fs-extra";
 import path from "path";
 import { execa } from "execa";
 import chalk from "chalk";
-import * as cliProgress from "cli-progress";
+import { logWithTimestamp } from "./lib/utils";
+import { createProgressBar } from "./lib/utils";
+import { showStep } from "./lib/utils";
 
-const input = "dragon.mkv";
-const outputDir = "output";
+export async function getVideoResolution(input: string) {
+  const progress = createProgressBar("Detecting video resolution", 100);
 
-// Timestamp helper function
-function getTimestamp(): string {
-  return new Date().toLocaleTimeString("en-US", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
+  try {
+    progress.update(20, "Running ffprobe...");
 
-// Enhanced logging with timestamps
-function logWithTimestamp(message: string, color: any = chalk.white) {
-  console.log(color(`[${getTimestamp()}] ${message}`));
-}
+    // Use ffprobe to get information about the video stream
+    const { stdout: videoInfo } = await execa(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "json",
+        input,
+      ],
+      { reject: false }
+    );
 
-// Progress bar helper functions using cli-progress
-function createProgressBar(title: string, total: number = 100) {
-  const bar = new cliProgress.SingleBar(
-    {
-      format: `${chalk.cyan(title)} |${chalk.cyan(
-        "{bar}"
-      )}| {percentage}% | ETA: {eta}s | {value}/{total} | {status}`,
-      barCompleteChar: "█",
-      barIncompleteChar: "░",
-      hideCursor: true,
-      clearOnComplete: false,
-      stopOnComplete: true,
-      etaBuffer: 50,
-    },
-    cliProgress.Presets.shades_classic
-  );
+    progress.update(60, "Parsing video data...");
 
-  bar.start(total, 0, { status: "Starting..." });
+    // Parse the JSON output
+    const videoData = JSON.parse(videoInfo);
+    const videoStream = videoData.streams?.[0];
 
-  const startTime = Date.now();
+    if (!videoStream) {
+      progress.fail("No video stream found");
+      throw new Error("No video stream found in the input file");
+    }
 
-  return {
-    update: (value: number, status?: string) => {
-      const elapsed = (Date.now() - startTime) / 1000;
-      const rate = value / elapsed;
-      const remaining = total - value;
-      const eta = rate > 0 ? Math.round(remaining / rate) : 0;
+    const width = videoStream.width;
+    const height = videoStream.height;
 
-      bar.update(value, {
-        status: status || "Processing...",
-        eta: eta,
-      });
-    },
-    complete: (status?: string) => {
-      bar.update(total, { status: status || "Complete" });
-      bar.stop();
-      logWithTimestamp(`✅ ${title} completed`, chalk.green);
-    },
-    fail: (status?: string) => {
-      bar.stop();
-      logWithTimestamp(
-        `❌ ${title} failed: ${status || "Unknown error"}`,
-        chalk.red
-      );
-    },
-  };
-}
+    progress.complete(`Detected resolution: ${width}x${height}`);
+    logWithTimestamp(
+      `📊 Detected video resolution: ${width}x${height}`,
+      chalk.blue
+    );
 
-function showStep(stepNumber: number, title: string, description?: string) {
-  console.log(
-    `\n${chalk.bgBlue.white(` STEP ${stepNumber} `)} ${chalk.bold.white(title)}`
-  );
-  if (description) {
-    logWithTimestamp(description, chalk.yellow);
+    return { width, height };
+  } catch (error) {
+    progress.fail(`Failed to detect video resolution: ${error}`);
+    throw error;
   }
-  console.log();
 }
 
-async function transcodeResolutions() {
+export async function transcodeResolutions(input: string, outputDir: string) {
   showStep(1, "Video Transcoding", "Converting video to multiple resolutions");
 
-  const resolutions = [
+  // Get the video resolution
+  const { width, height } = await getVideoResolution(input);
+
+  // Define all possible resolutions - removed 4K option for HLS compatibility
+  const allResolutions = [
     {
       name: "1080p",
       width: 1920,
@@ -109,6 +89,37 @@ async function transcodeResolutions() {
       bufsize: "2500k",
     },
   ];
+
+  // Determine which resolutions to use based on the source resolution
+  let resolutions = [];
+
+  if (height >= 2160 || width >= 3840) {
+    // 4K source - transcode to 1080p only (removed 4K option due to HLS player compatibility issues)
+    logWithTimestamp(
+      `⚠️ 4K source detected but transcoding to 1080p only for HLS compatibility`,
+      chalk.yellow
+    );
+    resolutions = allResolutions.filter((res) => res.name === "1080p");
+  } else if (height >= 1080 || width >= 1920) {
+    // 1080p source - transcode to 1080p only
+    resolutions = allResolutions.filter((res) => res.name === "1080p");
+  } else if (height >= 720 || width >= 1280) {
+    // 720p source - transcode to 720p only
+    resolutions = allResolutions.filter((res) => res.name === "720p");
+  } else {
+    // Lower resolution source - use the closest matching resolution
+    const sourceRes =
+      allResolutions.find((res) => res.height <= height) ||
+      allResolutions[allResolutions.length - 1];
+    resolutions = [sourceRes];
+  }
+
+  logWithTimestamp(
+    `🎬 Will transcode to the following resolutions: ${resolutions
+      .map((r) => r.name)
+      .join(", ")}`,
+    chalk.green
+  );
 
   for (const resolution of resolutions) {
     const progress = createProgressBar(`Transcoding ${resolution.name}`, 100);
@@ -227,7 +238,7 @@ async function transcodeResolutions() {
   }
 }
 
-async function extractAudioTracks() {
+export async function extractAudioTracks(input: string, outputDir: string) {
   showStep(2, "Audio Extraction", "Analyzing and extracting audio streams");
 
   const analysisProgress = createProgressBar("Analyzing audio streams", 100);
@@ -457,7 +468,7 @@ async function extractAudioTracks() {
   }
 }
 
-async function copySubtitles() {
+export async function copySubtitles(input: string, outputDir: string) {
   showStep(
     3,
     "Subtitle Processing",
@@ -670,7 +681,7 @@ async function copySubtitles() {
   return copiedSubtitles;
 }
 
-async function writeMasterPlaylist() {
+export async function writeMasterPlaylist(outputDir: string) {
   showStep(4, "Master Playlist Generation", "Creating dynamic master playlist");
 
   const playlistProgress = createProgressBar("Generating master playlist", 100);
@@ -882,13 +893,3 @@ async function writeMasterPlaylist() {
   logWithTimestamp("✅ Master playlist created successfully", chalk.green);
   playlistProgress.complete("Master playlist generated");
 }
-
-async function runAll() {
-  await fs.ensureDir(outputDir);
-  await transcodeResolutions();
-  await extractAudioTracks();
-  await copySubtitles();
-  await writeMasterPlaylist();
-}
-
-runAll();
