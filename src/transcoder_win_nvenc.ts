@@ -480,7 +480,11 @@ export async function copySubtitles(input: string, outputDir: string) {
   subtitleProgress.update(10, "Analyzing embedded subtitles...");
 
   // First, check for embedded subtitles in the input file
-  let embeddedSubtitles = [];
+  const embeddedSubtitles: Array<{
+    file: string;
+    language: string;
+    name: string;
+  }> = [];
   try {
     // Use ffprobe to get information about subtitle streams
     const { stdout: subtitleStreams } = await execa(
@@ -515,7 +519,7 @@ export async function copySubtitles(input: string, outputDir: string) {
         // Extract each embedded subtitle stream
         for (let i = 0; i < availableSubtitleStreams.length; i++) {
           const stream = availableSubtitleStreams[i];
-          const streamIndex = stream.index;
+          // const streamIndex = stream.index;
 
           // Get language from metadata
           let language = "unknown";
@@ -604,22 +608,187 @@ export async function copySubtitles(input: string, outputDir: string) {
     );
   }
 
-  // If we found embedded subtitles, we're done
+  // Track all found subtitles
+  const allSubtitles = [...embeddedSubtitles];
+
+  // If embedded subtitles were found, log them but continue to check for external subtitles
   if (embeddedSubtitles.length > 0) {
-    subtitleProgress.complete(
-      `Extracted ${embeddedSubtitles.length} embedded subtitle(s)`
+    logWithTimestamp(
+      `✓ Found ${embeddedSubtitles.length} embedded subtitle(s), continuing to check for external subtitles`,
+      chalk.green
     );
-    return embeddedSubtitles;
+  } else {
+    // If no embedded subtitles found, log that we're checking external subtitle files
+    subtitleProgress.update(
+      60,
+      "No embedded subtitles found, checking external files..."
+    );
+    logWithTimestamp(
+      "⚠ No embedded subtitles found, checking for external subtitle files...",
+      chalk.yellow
+    );
   }
 
-  // If no embedded subtitles found, fall back to external subtitle files
+  // Get the parent directory of the input file
+  const inputDir = path.dirname(input);
+  const parentDir = path.dirname(inputDir);
+  const inputFileName = path.basename(input, path.extname(input));
+
+  subtitleProgress.update(65, "Checking parent folder for .srt files...");
+
+  // 1. Check for .srt files in the parent folder
+  try {
+    const parentDirFiles = await fs.readdir(parentDir);
+    const srtFiles = parentDirFiles.filter((file) =>
+      file.toLowerCase().endsWith(".srt")
+    );
+
+    if (srtFiles.length > 0) {
+      logWithTimestamp(
+        `📊 Found ${srtFiles.length} .srt file(s) in parent folder`,
+        chalk.blue
+      );
+
+      // Process each .srt file
+      for (const srtFile of srtFiles) {
+        const srtPath = path.join(parentDir, srtFile);
+        const baseName = path.basename(srtFile, ".srt");
+
+        // Determine language from filename
+        let language = "unknown";
+        let name = "Unknown";
+
+        // Check if it's an English subtitle or has the same name as the input file
+        if (
+          baseName.toLowerCase().includes("eng") ||
+          baseName.toLowerCase().includes("en") ||
+          baseName.toLowerCase().includes("english") ||
+          baseName === inputFileName
+        ) {
+          language = "eng";
+          name = "English";
+        }
+
+        const outputVttFile = `subs_${language}.vtt`;
+        const outputVttPath = path.join(outputDir, outputVttFile);
+
+        // Convert .srt to .vtt
+        try {
+          subtitleProgress.update(70, `Converting ${srtFile} to VTT format...`);
+
+          await execa("ffmpeg", ["-y", "-i", srtPath, outputVttPath]);
+
+          logWithTimestamp(`✓ Converted ${srtFile} to VTT format`, chalk.green);
+
+          allSubtitles.push({
+            file: outputVttFile,
+            language,
+            name,
+          });
+        } catch (error) {
+          logWithTimestamp(
+            `✗ Error converting ${srtFile} to VTT: ${error}`,
+            chalk.red
+          );
+        }
+      }
+    }
+  } catch (error) {
+    logWithTimestamp(
+      `✗ Error checking parent folder for .srt files: ${error}`,
+      chalk.red
+    );
+  }
+
+  // 2. Check for "subs" or "Subs" directory in the parent folder
+  subtitleProgress.update(80, "Checking for subs directory...");
+
+  const possibleSubDirs = ["subs", "Subs", "subtitles", "Subtitles"];
+
+  for (const subDir of possibleSubDirs) {
+    const subDirPath = path.join(parentDir, subDir);
+
+    try {
+      if (await fs.pathExists(subDirPath)) {
+        logWithTimestamp(
+          `📊 Found subtitles directory: ${subDirPath}`,
+          chalk.blue
+        );
+
+        const subDirFiles = await fs.readdir(subDirPath);
+        const srtFiles = subDirFiles.filter((file) =>
+          file.toLowerCase().endsWith(".srt")
+        );
+
+        if (srtFiles.length > 0) {
+          logWithTimestamp(
+            `📊 Found ${srtFiles.length} .srt file(s) in ${subDir} directory`,
+            chalk.blue
+          );
+
+          // Process each .srt file
+          for (const srtFile of srtFiles) {
+            const srtPath = path.join(subDirPath, srtFile);
+            const baseName = path.basename(srtFile, ".srt");
+
+            // Determine language from filename
+            let language = "unknown";
+            let name = "Unknown";
+
+            // Check if it's an English subtitle or has the same name as the input file
+            if (
+              baseName.toLowerCase().includes("eng") ||
+              baseName.toLowerCase().includes("en") ||
+              baseName.toLowerCase().includes("english") ||
+              baseName === inputFileName
+            ) {
+              language = "eng";
+              name = "English";
+            }
+
+            const outputVttFile = `subs_${language}.vtt`;
+            const outputVttPath = path.join(outputDir, outputVttFile);
+
+            // Convert .srt to .vtt
+            try {
+              subtitleProgress.update(
+                85,
+                `Converting ${srtFile} to VTT format...`
+              );
+
+              await execa("ffmpeg", ["-y", "-i", srtPath, outputVttPath]);
+
+              logWithTimestamp(
+                `✓ Converted ${srtFile} to VTT format`,
+                chalk.green
+              );
+
+              allSubtitles.push({
+                file: outputVttFile,
+                language,
+                name,
+              });
+            } catch (error) {
+              logWithTimestamp(
+                `✗ Error converting ${srtFile} to VTT: ${error}`,
+                chalk.red
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      logWithTimestamp(
+        `✗ Error checking ${subDir} directory: ${error}`,
+        chalk.red
+      );
+    }
+  }
+
+  // 3. Finally, check for predefined external subtitle files in the current directory
   subtitleProgress.update(
-    60,
-    "No embedded subtitles found, checking external files..."
-  );
-  logWithTimestamp(
-    "⚠ No embedded subtitles found, checking for external subtitle files...",
-    chalk.yellow
+    90,
+    "Checking for predefined external subtitle files..."
   );
 
   // Define potential external subtitle files to check
@@ -638,7 +807,6 @@ export async function copySubtitles(input: string, outputDir: string) {
   ];
 
   // Track which external subtitle files were successfully copied
-  const copiedSubtitles = [];
   let processedCount = 0;
 
   // Try to copy each external subtitle file if it exists
@@ -646,7 +814,7 @@ export async function copySubtitles(input: string, outputDir: string) {
     try {
       if (await fs.pathExists(subtitle.file)) {
         subtitleProgress.update(
-          70 + (processedCount / externalSubtitleFiles.length) * 25,
+          95 + (processedCount / externalSubtitleFiles.length) * 5,
           `Copying ${subtitle.name}...`
         );
 
@@ -655,7 +823,7 @@ export async function copySubtitles(input: string, outputDir: string) {
           `✓ Copied ${subtitle.name} external subtitles`,
           chalk.green
         );
-        copiedSubtitles.push(subtitle);
+        allSubtitles.push(subtitle);
       }
     } catch (error) {
       logWithTimestamp(
@@ -666,19 +834,14 @@ export async function copySubtitles(input: string, outputDir: string) {
     processedCount++;
   }
 
-  if (copiedSubtitles.length === 0) {
+  if (allSubtitles.length === 0) {
     subtitleProgress.complete("No subtitle files found");
-    logWithTimestamp(
-      "⚠ No external subtitle files found either.",
-      chalk.yellow
-    );
+    logWithTimestamp("⚠ No subtitle files found.", chalk.yellow);
   } else {
-    subtitleProgress.complete(
-      `Copied ${copiedSubtitles.length} external subtitle file(s)`
-    );
+    subtitleProgress.complete(`Found ${allSubtitles.length} subtitle file(s)`);
   }
 
-  return copiedSubtitles;
+  return allSubtitles;
 }
 
 export async function writeMasterPlaylist(outputDir: string) {
@@ -690,7 +853,7 @@ export async function writeMasterPlaylist(outputDir: string) {
 
   // Check which audio tracks are available by scanning the audio directory
   const audioBaseDir = path.join(outputDir, "audio");
-  let audioTracks: Array<{
+  const audioTracks: Array<{
     file: string;
     language: string;
     name: string;
@@ -768,7 +931,7 @@ export async function writeMasterPlaylist(outputDir: string) {
   }
 
   // Check which subtitle files are available
-  const subtitleFiles = (await fs.readdir(outputDir))
+  const allSubtitleFiles = (await fs.readdir(outputDir))
     .filter((file) => file.endsWith(".vtt") && file.startsWith("subs_"))
     .map((file) => {
       const language = file.replace("subs_", "").replace(".vtt", "");
@@ -784,6 +947,7 @@ export async function writeMasterPlaylist(outputDir: string) {
         spa: { name: "Spanish", code: "es", default: false },
         ger: { name: "German", code: "de", default: false },
         jpn: { name: "Japanese", code: "ja", default: false },
+        nor: { name: "Norwegian", code: "no", default: false },
       };
 
       const langInfo = languageMap[language] || {
@@ -801,15 +965,40 @@ export async function writeMasterPlaylist(outputDir: string) {
       };
     });
 
-  // If we have multiple subtitles, make sure only one is default
-  if (subtitleFiles.length > 0) {
-    // Find if there's any subtitle marked as default
-    const hasDefault = subtitleFiles.some((sub) => sub.default);
+  // Filter to include only English and Hindi subtitles
+  const subtitleFiles = allSubtitleFiles.filter(
+    (sub) => sub.language === "eng" || sub.language === "hin"
+  );
 
-    // If no default is set, make the first one default
-    if (!hasDefault && subtitleFiles.length > 0) {
+  // Ensure English is default if present, otherwise make the first one default
+  if (subtitleFiles.length > 0) {
+    const englishSub = subtitleFiles.find((sub) => sub.language === "eng");
+    if (englishSub) {
+      englishSub.default = true;
+      // Make sure other subtitles are not default
+      subtitleFiles.forEach((sub) => {
+        if (sub.language !== "eng") {
+          sub.default = false;
+        }
+      });
+    } else {
+      // If no English, make the first one default
       subtitleFiles[0].default = true;
     }
+  }
+
+  // Create individual M3U8 playlist files for each subtitle track
+  for (const sub of subtitleFiles) {
+    const playlistContent = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:1
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXTINF:1.000,
+${sub.file}
+#EXT-X-ENDLIST
+`;
+    const playlistFileName = `subs_${sub.language}.m3u8`;
+    await fs.writeFile(path.join(outputDir, playlistFileName), playlistContent);
   }
 
   // Check which video resolutions are available
@@ -819,9 +1008,6 @@ export async function writeMasterPlaylist(outputDir: string) {
 
   // Build the master playlist dynamically based on available tracks
   let content = `#EXTM3U\n\n`;
-
-  // Note: Subtitles are handled directly by the player, not in the master playlist
-  // as EXT-X-MEDIA entries. The .vtt files will be loaded separately by the player.
 
   // Add audio tracks if they exist
   if (audioTracks.length > 0) {
@@ -836,9 +1022,23 @@ export async function writeMasterPlaylist(outputDir: string) {
     content += `\n`;
   }
 
+  // Add subtitle tracks if they exist
+  if (subtitleFiles.length > 0) {
+    content += `# Subtitle tracks\n`;
+    for (const sub of subtitleFiles) {
+      const playlistFileName = `subs_${sub.language}.m3u8`;
+      content += `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",NAME="${
+        sub.name
+      }",LANGUAGE="${sub.code}",URI="${playlistFileName}",DEFAULT=${
+        sub.default ? "YES" : "NO"
+      },AUTOSELECT=YES\n`;
+    }
+    content += `\n`;
+  }
+
   // Add video streams
   const audioParam = audioTracks.length > 0 ? ',AUDIO="audio"' : "";
-  // Remove subtitle parameter from video streams as we're not using EXT-X-MEDIA for subtitles
+  const subtitleParam = subtitleFiles.length > 0 ? ',SUBTITLES="subs"' : "";
 
   content += `# Video streams\n`;
 
@@ -876,7 +1076,7 @@ export async function writeMasterPlaylist(outputDir: string) {
       codec: "hev1.1.6.L123.B0",
     };
 
-    content += `#EXT-X-STREAM-INF:BANDWIDTH=${info.bandwidth},RESOLUTION=${info.resolution},CODECS="${info.codec},mp4a.40.2"${audioParam}\n`;
+    content += `#EXT-X-STREAM-INF:BANDWIDTH=${info.bandwidth},RESOLUTION=${info.resolution},CODECS="${info.codec},mp4a.40.2"${audioParam}${subtitleParam}\n`;
     content += `${dir}/stream.m3u8\n\n`;
   }
 

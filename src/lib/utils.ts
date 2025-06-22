@@ -1,5 +1,5 @@
 import * as cliProgress from "cli-progress";
-import chalk from "chalk";
+import chalk, { ChalkInstance } from "chalk";
 // Timestamp helper function
 export function getTimestamp(): string {
   return new Date().toLocaleTimeString("en-US", {
@@ -11,7 +11,10 @@ export function getTimestamp(): string {
 }
 
 // Enhanced logging with timestamps
-export function logWithTimestamp(message: string, color: any = chalk.white) {
+export function logWithTimestamp(
+  message: string,
+  color: ChalkInstance = chalk.white
+) {
   console.log(color(`[${getTimestamp()}] ${message}`));
 }
 
