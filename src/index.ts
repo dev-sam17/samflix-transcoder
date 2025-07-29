@@ -21,6 +21,7 @@ import {
 } from "./dbOperations";
 import { TranscodeStatus } from "./lib/types";
 import fs from "fs";
+import chalk from "chalk";
 
 async function main() {
   const pendingMovies = await getPendingTranscodeMovies();
@@ -28,7 +29,12 @@ async function main() {
   const pendingEpisodes = await getPendingTranscodeEpisodes();
   console.log("Pending episodes: ", pendingEpisodes.length);
 
-  for (const movie of pendingMovies) {
+  for (const [index, movie] of pendingMovies.entries()) {
+    console.log(
+      chalk.bgWhite.black(
+        `-------TRANSCODING MOVIES: ${index + 1} of ${pendingMovies.length}-------`
+      )
+    );
     const parsedPath = parseFilePath(toWindowsPath(movie.filePath));
     const exists = await fileExists(parsedPath);
     if (!exists) {
@@ -62,7 +68,12 @@ async function main() {
     }
   }
 
-  for (const episode of pendingEpisodes) {
+  for (const [index, episode] of pendingEpisodes.entries()) {
+    console.log(
+      chalk.bgWhite.black(
+        `-------TRANSCODING EPISODES: ${index + 1} of ${pendingEpisodes.length}-------`
+      )
+    );
     const parsedPath = parseFilePath(toWindowsPath(episode.filePath));
     const exists = await fileExists(parsedPath);
     if (!exists) {

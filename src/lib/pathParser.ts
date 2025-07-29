@@ -1,6 +1,11 @@
 const pathMap: Record<string, string> = {
   "/media/movies/test": "//192.168.29.41/Storage3/Movies/test-movies",
   "/media/series/test": "//192.168.29.41/Storage3/Web Series/test-series",
+  "/media/movies/anime": "//192.168.29.41/Storage3/Movies/Anime Movies",
+  "/media/movies/bollywood": "//192.168.29.41/Storage3/Movies/Bollywood",
+  "/media/movies/hollywood": "//192.168.29.41/Storage3/Movies/Hollywood",
+  "/media/movies/korean": "//192.168.29.41/Storage3/Movies/Korean Movies",
+  "/media/movies/south": "//192.168.29.41/Storage3/Movies/South Action",
 };
 
 export function parseFilePath(filePath: string): string {

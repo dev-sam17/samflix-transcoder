@@ -324,6 +324,11 @@ export async function extractAudioTracks(input: string, outputDir: string) {
           ger: { name: "German", code: "de", default: false },
           ja: { name: "Japanese", code: "ja", default: false },
           jpn: { name: "Japanese", code: "ja", default: false },
+          ko: { name: "Korean", code: "ko", default: false },
+          korean: { name: "Korean", code: "ko", default: false },
+          zh: { name: "Chinese", code: "zh", default: false },
+          chi: { name: "Chinese", code: "chi", default: false },
+          chinese: { name: "Chinese", code: "chi", default: false },
           ta: { name: "Tamil", code: "ta", default: false },
           tam: { name: "Tamil", code: "ta", default: false },
           te: { name: "Telugu", code: "te", default: false },
@@ -385,6 +390,25 @@ export async function extractAudioTracks(input: string, outputDir: string) {
 
       try {
         audioProgress.update(20, "Extracting audio stream...");
+
+        if (
+          !(
+            language === "hin" ||
+            language === "eng" ||
+            language == "hi" ||
+            language == "en" ||
+            language == "und" ||
+            language == "ja" ||
+            language == "jpn" ||
+            language == "ko" ||
+            language == "korean" ||
+            language == "zh" ||
+            language == "chi" ||
+            language == "chinese"
+          )
+        ) {
+          continue;
+        }
 
         // Extract the audio stream with proper HLS-compatible settings
         const extractProcess = execa("ffmpeg", [
@@ -539,7 +563,9 @@ export async function copySubtitles(input: string, outputDir: string) {
             { name: string; code: string; default: boolean }
           > = {
             en: { name: "English", code: "en", default: true },
-            hin: { name: "Hindi", code: "hi", default: false },
+            eng: { name: "English", code: "eng", default: true },
+            hin: { name: "Hindi", code: "hin", default: false },
+            hi: { name: "Hindi", code: "hi", default: false },
             fre: { name: "French", code: "fr", default: false },
             spa: { name: "Spanish", code: "es", default: false },
             ger: { name: "German", code: "de", default: false },
@@ -561,6 +587,18 @@ export async function copySubtitles(input: string, outputDir: string) {
             extractProgress.update(20, "Starting extraction...");
 
             const outputFile = path.join(outputDir, `subs_${language}.vtt`);
+
+            if (
+              !(
+                language === "und" ||
+                language === "en" ||
+                language === "eng" ||
+                language === "hin" ||
+                language === "hi"
+              )
+            ) {
+              continue;
+            }
 
             // Extract subtitle stream and convert to WebVTT format
             const extractProcess = execa("ffmpeg", [
@@ -649,36 +687,57 @@ export async function copySubtitles(input: string, outputDir: string) {
         chalk.blue
       );
 
-      // Process each .srt file
-      for (const srtFile of srtFiles) {
+      // Process the first .srt file found in parent directory as English default subtitle
+      if (srtFiles.length > 0) {
+        const srtFile = srtFiles[0]; // Take the first .srt file
         const srtPath = path.join(parentDir, srtFile);
-        const baseName = path.basename(srtFile, ".srt");
 
-        // Determine language from filename
-        let language = "unknown";
-        let name = "Unknown";
-
-        // Check if it's an English subtitle or has the same name as the input file
-        if (
-          baseName.toLowerCase().includes("eng") ||
-          baseName.toLowerCase().includes("en") ||
-          baseName.toLowerCase().includes("english") ||
-          baseName === inputFileName
-        ) {
-          language = "eng";
-          name = "English";
-        }
+        // Always treat the .srt file in parent directory as English, regardless of name
+        const language = "eng";
+        const name = "English";
 
         const outputVttFile = `subs_${language}.vtt`;
         const outputVttPath = path.join(outputDir, outputVttFile);
 
-        // Convert .srt to .vtt
+        // Create a temporary SRT file with adjusted timing
+        const tempSrtPath = path.join(outputDir, "temp_adjusted.srt");
+
         try {
-          subtitleProgress.update(70, `Converting ${srtFile} to VTT format...`);
+          subtitleProgress.update(
+            70,
+            `Converting ${srtFile} to VTT format with timing adjustment...`
+          );
 
-          await execa("ffmpeg", ["-y", "-i", srtPath, outputVttPath]);
+          // First, read the SRT file content
+          const srtContent = await fs.readFile(srtPath, "utf8");
 
-          logWithTimestamp(`✓ Converted ${srtFile} to VTT format`, chalk.green);
+          // Process SRT content to add delay (0.5 seconds = 500ms)
+          const delayMs = 375;
+          const adjustedSrtContent = adjustSubtitleTiming(srtContent, delayMs);
+
+          // Write the adjusted content to temp file
+          await fs.writeFile(tempSrtPath, adjustedSrtContent);
+
+          // Convert the adjusted SRT to VTT
+          await execa("ffmpeg", [
+            "-y",
+            "-i",
+            tempSrtPath,
+            "-c:s",
+            "webvtt",
+            "-metadata:s:s:0",
+            "language=eng",
+            outputVttPath,
+          ]);
+
+          // Clean up temp file
+          await fs.remove(tempSrtPath);
+
+          logWithTimestamp(
+            `✓ Converted ${srtFile} to VTT format with timing adjustment`,
+            chalk.green
+          );
+          logWithTimestamp(`✓ Set as default English subtitle`, chalk.green);
 
           allSubtitles.push({
             file: outputVttFile,
@@ -690,8 +749,18 @@ export async function copySubtitles(input: string, outputDir: string) {
             `✗ Error converting ${srtFile} to VTT: ${error}`,
             chalk.red
           );
+          // Clean up temp file if it exists
+          try {
+            if (await fs.pathExists(tempSrtPath)) {
+              await fs.remove(tempSrtPath);
+            }
+          } catch (e) {
+            // Ignore cleanup errors
+          }
         }
       }
+
+      // Skip processing other .srt files in parent directory since we've already set the default
     }
   } catch (error) {
     logWithTimestamp(
@@ -839,6 +908,53 @@ export async function copySubtitles(input: string, outputDir: string) {
     logWithTimestamp("⚠ No subtitle files found.", chalk.yellow);
   } else {
     subtitleProgress.complete(`Found ${allSubtitles.length} subtitle file(s)`);
+  }
+
+  // Create individual M3U8 playlist files for each subtitle track
+  for (const sub of allSubtitles) {
+    // Verify the VTT file exists
+    const vttPath = path.join(outputDir, sub.file);
+    if (await fs.pathExists(vttPath)) {
+      // Read the VTT file to check its content
+      const vttContent = await fs.readFile(vttPath, "utf8");
+
+      // Process VTT content to ensure proper formatting
+      let processedVttContent = vttContent;
+
+      // If the VTT file doesn't have WEBVTT header, add it
+      if (!processedVttContent.trim().startsWith("WEBVTT")) {
+        processedVttContent = `WEBVTT\n\n${processedVttContent}`;
+      }
+
+      // Write back the processed VTT file
+      await fs.writeFile(vttPath, processedVttContent);
+
+      // Create a simple playlist with the single VTT file
+      const playlistContent = `#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:1
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-PLAYLIST-TYPE:VOD
+#EXTINF:1.000,
+${sub.file}
+#EXT-X-ENDLIST
+`;
+      const playlistFileName = `subs_${sub.language}.m3u8`;
+      await fs.writeFile(
+        path.join(outputDir, playlistFileName),
+        playlistContent
+      );
+
+      logWithTimestamp(
+        `✓ Created subtitle playlist for ${sub.name}`,
+        chalk.green
+      );
+    } else {
+      logWithTimestamp(
+        `⚠ VTT file ${sub.file} not found, skipping playlist creation`,
+        chalk.yellow
+      );
+    }
   }
 
   return allSubtitles;
@@ -1092,4 +1208,72 @@ ${sub.file}
 
   logWithTimestamp("✅ Master playlist created successfully", chalk.green);
   playlistProgress.complete("Master playlist generated");
+}
+
+function adjustSubtitleTiming(srtContent: string, delayMs: number): string {
+  // Split the SRT content into subtitle blocks
+  const blocks = srtContent
+    .split(/\r?\n\r?\n/)
+    .filter((block) => block.trim() !== "");
+
+  // Process each subtitle block
+  const adjustedBlocks = blocks.map((block) => {
+    const lines = block.split(/\r?\n/);
+    if (lines.length < 2) return block; // Skip invalid blocks
+
+    // Find the timing line (second line in each block)
+    const timingLine = lines[1];
+    const timingMatch = timingLine.match(
+      /(\d{2}:\d{2}:\d{2},\d{3}) --> (\d{2}:\d{2}:\d{2},\d{3})/
+    );
+
+    if (!timingMatch) return block; // Skip if timing format doesn't match
+
+    // Extract start and end times
+    const startTime = timingMatch[1];
+    const endTime = timingMatch[2];
+
+    // Add delay to both start and end times
+    const adjustedStartTime = addDelay(startTime, delayMs);
+    const adjustedEndTime = addDelay(endTime, delayMs);
+
+    // Replace the timing line
+    lines[1] = `${adjustedStartTime} --> ${adjustedEndTime}`;
+
+    // Reconstruct the block
+    return lines.join("\n");
+  });
+
+  // Join the blocks back together
+  return adjustedBlocks.join("\n\n");
+}
+
+function addDelay(timeStr: string, delayMs: number): string {
+  // Parse the time string (format: HH:MM:SS,mmm)
+  const [timepart, mspart] = timeStr.split(",");
+  const [hours, minutes, seconds] = timepart.split(":").map(Number);
+  const ms = parseInt(mspart);
+
+  // Convert to total milliseconds
+  let totalMs =
+    ms + seconds * 1000 + minutes * 60 * 1000 + hours * 60 * 60 * 1000;
+
+  // Add delay
+  totalMs += delayMs;
+
+  // Convert back to HH:MM:SS,mmm format
+  const newHours = Math.floor(totalMs / (60 * 60 * 1000));
+  totalMs %= 60 * 60 * 1000;
+  const newMinutes = Math.floor(totalMs / (60 * 1000));
+  totalMs %= 60 * 1000;
+  const newSeconds = Math.floor(totalMs / 1000);
+  const newMs = totalMs % 1000;
+
+  // Format with leading zeros
+  const formattedHours = newHours.toString().padStart(2, "0");
+  const formattedMinutes = newMinutes.toString().padStart(2, "0");
+  const formattedSeconds = newSeconds.toString().padStart(2, "0");
+  const formattedMs = newMs.toString().padStart(3, "0");
+
+  return `${formattedHours}:${formattedMinutes}:${formattedSeconds},${formattedMs}`;
 }
