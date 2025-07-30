@@ -80,13 +80,10 @@ export async function getPendingTranscodeMovies() {
       where: {
         OR: [
           {
-            transcodeStatus: TranscodeStatus.PENDING,
+            transcodeStatus: TranscodeStatus.QUEUED,
           },
           {
             transcodeStatus: TranscodeStatus.IN_PROGRESS,
-          },
-          {
-            transcodeStatus: TranscodeStatus.FAILED,
           },
         ],
       },
@@ -116,13 +113,10 @@ export async function getPendingTranscodeEpisodes() {
       where: {
         OR: [
           {
-            transcodeStatus: TranscodeStatus.PENDING,
+            transcodeStatus: TranscodeStatus.QUEUED,
           },
           {
             transcodeStatus: TranscodeStatus.IN_PROGRESS,
-          },
-          {
-            transcodeStatus: TranscodeStatus.FAILED,
           },
         ],
       },

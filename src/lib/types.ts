@@ -1,6 +1,7 @@
 export enum TranscodeStatus {
   PENDING = "PENDING",
   IN_PROGRESS = "IN_PROGRESS",
+  QUEUED = "QUEUED",
   COMPLETED = "COMPLETED",
   FAILED = "FAILED",
 }
