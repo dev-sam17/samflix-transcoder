@@ -10,37 +10,40 @@ import {
   toUnixPath,
   sanitizePathComponent,
 } from "./lib/pathUtils";
-import {
-  getPendingTranscodeMovies,
-  getPendingTranscodeEpisodes,
-  updateMovieTranscodeStatus,
-  updateMoviePlayPath,
-  updateEpisodeTranscodeStatus,
-  updateEpisodePlayPath,
-  // markAllAsPending,
-} from "./dbOperations";
+import { dbOperations } from "./dbOperations";
 import { TranscodeStatus } from "./lib/types";
+import { invalidateCache } from "./lib/cacheInvalidation";
 import fs from "fs";
 import chalk from "chalk";
 
 async function main() {
   try {
-    const pendingMovies = await getPendingTranscodeMovies();
-    console.log("Pending movies: ", pendingMovies.length);
-    const pendingEpisodes = await getPendingTranscodeEpisodes();
-    console.log("Pending episodes: ", pendingEpisodes.length);
+    const queuedMovies = await dbOperations.getQueuedTranscodeMovies();
+    console.log("Queued movies: ", queuedMovies.length);
+    const queuedSeries = await dbOperations.getQueuedTranscodeTvSeries();
+    console.log("Queued TV series: ", queuedSeries.length);
 
-    for (const [index, movie] of pendingMovies.entries()) {
+    // Count total episodes across all series
+    const totalEpisodes = queuedSeries.reduce(
+      (total, series) => total + series.episodes.length,
+      0
+    );
+    console.log("Total episodes to transcode: ", totalEpisodes);
+
+    for (const [index, movie] of queuedMovies.entries()) {
       console.log(
         chalk.bgWhite.black(
-          `-------TRANSCODING MOVIES: ${index + 1} of ${pendingMovies.length}-------`
+          `-------TRANSCODING MOVIES: ${index + 1} of ${queuedMovies.length}-------`
         )
       );
       const parsedPath = parseFilePath(toWindowsPath(movie.filePath));
       const exists = await fileExists(parsedPath);
       if (!exists) {
         console.log("File does not exist.");
-        await updateMovieTranscodeStatus(movie.id, TranscodeStatus.FAILED);
+        await dbOperations.updateMovieTranscodeStatus(
+          movie.id,
+          TranscodeStatus.FAILED
+        );
         continue;
       }
 
@@ -52,87 +55,174 @@ async function main() {
         path.join(containerParentDir, sanitizedMovieTitle, `master.m3u8`)
       );
       try {
-        await updateMovieTranscodeStatus(movie.id, TranscodeStatus.IN_PROGRESS);
+        await dbOperations.updateMovieTranscodeStatus(
+          movie.id,
+          TranscodeStatus.IN_PROGRESS
+        );
         if (fs.existsSync(parseFilePath(toWindowsPath(playPath)))) {
           console.log("Movie already transcoded.");
-          await updateMovieTranscodeStatus(movie.id, TranscodeStatus.COMPLETED);
-          await updateMoviePlayPath(movie.id, playPath);
+          await dbOperations.updateMovieTranscodeStatus(
+            movie.id,
+            TranscodeStatus.COMPLETED
+          );
+          await dbOperations.updateMoviePlayPath(movie.id, playPath);
+
+          // Invalidate cache for already transcoded movie
+          await invalidateCache();
           continue;
         } else {
           await transcoder(parsedPath, outputDir, movie.title);
         }
-        await updateMovieTranscodeStatus(movie.id, TranscodeStatus.COMPLETED);
-        await updateMoviePlayPath(movie.id, playPath);
+        await dbOperations.updateMovieTranscodeStatus(
+          movie.id,
+          TranscodeStatus.COMPLETED
+        );
+        await dbOperations.updateMoviePlayPath(movie.id, playPath);
+
+        // Invalidate cache after successful movie transcode
+        await invalidateCache();
       } catch (error) {
         console.error("Error transcoding movie:", error);
-        await updateMovieTranscodeStatus(movie.id, TranscodeStatus.FAILED);
+        await dbOperations.updateMovieTranscodeStatus(
+          movie.id,
+          TranscodeStatus.FAILED
+        );
       }
     }
 
-    for (const [index, episode] of pendingEpisodes.entries()) {
+    // Process TV Series
+    for (const [seriesIndex, series] of queuedSeries.entries()) {
       console.log(
-        chalk.bgWhite.black(
-          `-------TRANSCODING EPISODES: ${index + 1} of ${pendingEpisodes.length}-------`
+        chalk.bgBlue.white(
+          `-------TRANSCODING SERIES: ${seriesIndex + 1} of ${queuedSeries.length} - ${series.title}-------`
         )
       );
-      const parsedPath = parseFilePath(toWindowsPath(episode.filePath));
-      const exists = await fileExists(parsedPath);
-      if (!exists) {
-        console.log("File does not exist.");
-        await updateEpisodeTranscodeStatus(episode.id, TranscodeStatus.FAILED);
-        continue;
-      }
 
-      const parentDir = path.dirname(parsedPath);
-      const containerParentDir = path.dirname(episode.filePath);
-      const sanitizedSeriesTitle = sanitizePathComponent(
-        `HLS ${episode.series.title}`
-      );
-      const sanitizedEpisodeTitle = sanitizePathComponent(
-        `HLS S${episode.seasonNumber}E${episode.episodeNumber} ${episode.title}`
-      );
-
-      const outputDir = path.join(
-        parentDir,
-        sanitizedSeriesTitle,
-        sanitizedEpisodeTitle
-      );
-      const playPath = toUnixPath(
-        path.join(
-          containerParentDir,
-          sanitizedSeriesTitle,
-          sanitizedEpisodeTitle,
-          `master.m3u8`
-        )
-      );
       try {
-        await updateEpisodeTranscodeStatus(
-          episode.id,
+        await dbOperations.updateTvSeriesTranscodeStatus(
+          series.id,
           TranscodeStatus.IN_PROGRESS
         );
-        if (fs.existsSync(parseFilePath(toWindowsPath(playPath)))) {
-          console.log("Episode already transcoded.");
-          await updateEpisodeTranscodeStatus(
-            episode.id,
+
+        let seriesHasFailures = false;
+
+        // Process each episode in the series
+        for (const [episodeIndex, episode] of series.episodes.entries()) {
+          console.log(
+            chalk.bgWhite.black(
+              `-------TRANSCODING EPISODE: ${episodeIndex + 1} of ${series.episodes.length} - S${episode.seasonNumber}E${episode.episodeNumber} ${episode.title}-------`
+            )
+          );
+
+          const parsedPath = parseFilePath(toWindowsPath(episode.filePath));
+          const exists = await fileExists(parsedPath);
+          if (!exists) {
+            console.log("Episode file does not exist.");
+            await dbOperations.updateEpisodeTranscodeStatus(
+              episode.id,
+              TranscodeStatus.FAILED
+            );
+            seriesHasFailures = true;
+            continue;
+          }
+
+          const parentDir = path.dirname(parsedPath);
+          const containerParentDir = path.dirname(episode.filePath);
+          const sanitizedSeriesTitle = sanitizePathComponent(
+            `HLS ${series.title}`
+          );
+          const sanitizedEpisodeTitle = sanitizePathComponent(
+            `HLS S${episode.seasonNumber}E${episode.episodeNumber} ${episode.title}`
+          );
+
+          const outputDir = path.join(
+            parentDir,
+            sanitizedSeriesTitle,
+            sanitizedEpisodeTitle
+          );
+          const playPath = toUnixPath(
+            path.join(
+              containerParentDir,
+              sanitizedSeriesTitle,
+              sanitizedEpisodeTitle,
+              `master.m3u8`
+            )
+          );
+
+          try {
+            await dbOperations.updateEpisodeTranscodeStatus(
+              episode.id,
+              TranscodeStatus.IN_PROGRESS
+            );
+
+            if (fs.existsSync(parseFilePath(toWindowsPath(playPath)))) {
+              console.log("Episode already transcoded.");
+              await dbOperations.updateEpisodeTranscodeStatus(
+                episode.id,
+                TranscodeStatus.COMPLETED
+              );
+              await dbOperations.updateEpisodePlayPath(episode.id, playPath);
+
+              // Invalidate cache for already transcoded episode
+              await invalidateCache();
+              continue;
+            } else {
+              await transcoder(
+                parsedPath,
+                outputDir,
+                `${series.title} S${episode.seasonNumber}E${episode.episodeNumber} ${episode.title}`
+              );
+            }
+
+            await dbOperations.updateEpisodeTranscodeStatus(
+              episode.id,
+              TranscodeStatus.COMPLETED
+            );
+            await dbOperations.updateEpisodePlayPath(episode.id, playPath);
+
+            // Invalidate cache after successful episode transcode
+            await invalidateCache();
+          } catch (error) {
+            console.error("Error transcoding episode:", error);
+            await dbOperations.updateEpisodeTranscodeStatus(
+              episode.id,
+              TranscodeStatus.FAILED
+            );
+            seriesHasFailures = true;
+          }
+        }
+
+        // Check if all episodes in the series are completed
+        const allEpisodesCompleted =
+          await dbOperations.checkAllEpisodesCompleted(series.id);
+
+        if (allEpisodesCompleted && !seriesHasFailures) {
+          await dbOperations.updateTvSeriesTranscodeStatus(
+            series.id,
             TranscodeStatus.COMPLETED
           );
-          await updateEpisodePlayPath(episode.id, playPath);
-          continue;
+          console.log(
+            chalk.green(
+              `✅ Series "${series.title}" transcoding completed successfully!`
+            )
+          );
         } else {
-          await transcoder(
-            parsedPath,
-            outputDir,
-            `${episode.series.title} ${episode.seasonNumber} ${episode.episodeNumber}`
+          await dbOperations.updateTvSeriesTranscodeStatus(
+            series.id,
+            TranscodeStatus.FAILED
+          );
+          console.log(
+            chalk.red(
+              `❌ Series "${series.title}" transcoding failed or incomplete.`
+            )
           );
         }
-        await updateEpisodeTranscodeStatus(
-          episode.id,
-          TranscodeStatus.COMPLETED
-        );
-        await updateEpisodePlayPath(episode.id, playPath);
       } catch (error) {
-        console.error("Error transcoding episode:", error);
-        await updateEpisodeTranscodeStatus(episode.id, TranscodeStatus.FAILED);
+        console.error("Error transcoding series:", error);
+        await dbOperations.updateTvSeriesTranscodeStatus(
+          series.id,
+          TranscodeStatus.FAILED
+        );
       }
     }
   } catch (error) {
@@ -143,7 +233,7 @@ async function main() {
 }
 
 // async function markPending() {
-//   await markAllAsPending();
+//   await dbOperations.markAllAsPending();
 // }
 
 // markPending().catch(console.error);

@@ -15,7 +15,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@dev-sam17/prisma-client-for-samflix": "^0.1.7",
+    "@dev-sam17/prisma-client-for-samflix": "^0.1.8",
     "@types/node": "^24.0.1",
     "chalk": "^5.4.1",
     "cli-progress": "^3.12.0",

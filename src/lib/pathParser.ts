@@ -6,6 +6,7 @@ const pathMap: Record<string, string> = {
   "/media/movies/hollywood": "//192.168.29.41/Storage3/Movies/Hollywood",
   "/media/movies/korean": "//192.168.29.41/Storage3/Movies/Korean Movies",
   "/media/movies/south": "//192.168.29.41/Storage3/Movies/South Action",
+  "/media/series/hindi": "//192.168.29.41/Storage3/Web Series/Hindi",
 };
 
 export function parseFilePath(filePath: string): string {

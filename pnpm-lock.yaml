@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@dev-sam17/prisma-client-for-samflix':
-        specifier: ^0.1.7
-        version: 0.1.7(prisma@6.10.0(typescript@5.8.3))(typescript@5.8.3)
+        specifier: ^0.1.8
+        version: 0.1.8(prisma@6.10.0(typescript@5.8.3))(typescript@5.8.3)
       '@types/node':
         specifier: ^24.0.1
         version: 24.0.1
@@ -86,8 +86,8 @@ packages:
     resolution: {integrity: sha512-F9rL9k9Xjf5blCz8HsJRO4diy111cayL2vkY2XE4r4t3n0yPXVYy3KD3nJ1qbrSn9743UWSXH4IwuCa/HWlGFw==}
     engines: {node: '>=6.0.0'}
 
-  '@dev-sam17/prisma-client-for-samflix@0.1.7':
-    resolution: {integrity: sha512-Nz976xnnZQRJzXWrakAOvwH12cLAPbmHN4jZ5K3mdApif3DVEh2PVbXx/awEjLRpW/jAQyPRK8Net6MiQU3pQQ==, tarball: https://npm.pkg.github.com/download/@dev-sam17/prisma-client-for-samflix/0.1.7/97df1292b45a81802efa7dc40e21d88473488e3b}
+  '@dev-sam17/prisma-client-for-samflix@0.1.8':
+    resolution: {integrity: sha512-DdzgpKXnVLpAWsqvCGD4VouSiPbDt7GV8xtmznaDYzfTozPcJ+QjLdUH71sQMGvPVRcRd3a8aOure4weRRSRCg==, tarball: https://npm.pkg.github.com/download/@dev-sam17/prisma-client-for-samflix/0.1.8/25d1ef944bc94b75398606c8fe362f71a7e2fbb1}
 
   '@eslint-community/eslint-utils@4.7.0':
     resolution: {integrity: sha512-dyybb3AcajC7uha6CvhdVRJqaKyn7w2YKqKyAN37NKYgZT36w+iRb0Dymmc5qEJ549c/S31cMMSFd75bteCpCw==}
@@ -1181,7 +1181,7 @@ snapshots:
       http-response-object: 3.0.2
       parse-cache-control: 1.0.1
 
-  '@dev-sam17/prisma-client-for-samflix@0.1.7(prisma@6.10.0(typescript@5.8.3))(typescript@5.8.3)':
+  '@dev-sam17/prisma-client-for-samflix@0.1.8(prisma@6.10.0(typescript@5.8.3))(typescript@5.8.3)':
     dependencies:
       '@prisma/client': 6.10.0(prisma@6.10.0(typescript@5.8.3))(typescript@5.8.3)
     transitivePeerDependencies:
